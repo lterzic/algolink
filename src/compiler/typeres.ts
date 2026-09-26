@@ -36,7 +36,7 @@ export function resolveTypes(g: Graph): ResolvedTypes {
     let countFresh = 0;
     const resolveVars = (t: TypeExpr) => {
         t = walk(t, r);
-        if (t.k === "var") {
+        if (t.k === "var" && !result.vars.includes(t.name)) {
             const tr: TypeExpr = { k: "var", name: `T${countFresh++}` };
             r.set(t.name, tr);
             result.vars.push(tr.name);
