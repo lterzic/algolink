@@ -10,5 +10,7 @@ export interface BlockDecl {
     name: string;
     inputs: PortList;
     outputs: PortList;
+    stateful: boolean;
+    feedthrough?: Record<string, string[]>; // Inputs each output reads directly, all if omitted
     // TODO: Add params
 }

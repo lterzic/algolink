@@ -46,16 +46,17 @@ export function resolveTypes(g: Graph): ResolvedTypes {
     };
 
     for (const [nid, node] of g.nodes) {
-        result.binds.set(nid, new Map());
+        const binds: Map<string, TypeExpr> = new Map();
         const b = library.get(node.block)!;
         for (const ports of [b.inputs, b.outputs]) {
             for (const [pname, ptype] of Object.entries(ports)) {
                 if (ptype.k === "var") {
                     const rt = resolveVars(mangle(nid, ptype));
-                    result.binds.get(nid)!.set(ptype.name, rt);
+                    binds.set(ptype.name, rt);
                 }
             }
         }
+        result.binds.set(nid, binds);
     }
 
     return result;

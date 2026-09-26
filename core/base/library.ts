@@ -29,6 +29,26 @@ function validateBlockDecl(decl: BlockDecl): string[] {
         }
     }
 
+    if (decl.feedthrough) {
+        for (const [out, ins] of Object.entries(decl.feedthrough)) {
+            if (!Object.hasOwn(decl.outputs, out))
+                errors.push(`${decl.name}: feedthrough for unknown output "${out}"`);
+            if (new Set(ins).size !== ins.length)
+                errors.push(`${decl.name}: duplicate feedthrough inputs for output "${out}"`);
+            for (const i of ins)
+                if (!Object.hasOwn(decl.inputs, i))
+                    errors.push(`${decl.name}: feedthrough of output "${out}" names unknown input "${i}"`);
+        }
+
+        // Without state, an unread input is ignored entirely
+        if (!decl.stateful) {
+            const read = new Set(Object.values(decl.feedthrough).flat());
+            for (const i of Object.keys(decl.inputs))
+                if (!read.has(i))
+                    errors.push(`${decl.name}: stateless block never reads input "${i}"`);
+        }
+    }
+
     return errors;
 }
 
