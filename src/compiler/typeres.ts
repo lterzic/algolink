@@ -1,6 +1,6 @@
 import type { TypeExpr } from "../base/block.js";
 import { edgeName, type Graph } from "../base/graph.js";
-import { library } from "../base/library.js";
+import type { Registry } from "../base/library.js";
 
 export interface ResolvedTypes {
     vars: string[]; // Graph generics if vars ambiguous
@@ -8,7 +8,7 @@ export interface ResolvedTypes {
 }
 
 // Expects a graph that passed validateGraph
-export function resolveTypes(g: Graph): ResolvedTypes {
+export function resolveTypes(g: Graph, reg: Registry): ResolvedTypes {
     const r: Resolution = new Map();
 
     const mangle = (nid: string, t: TypeExpr): TypeExpr => (
@@ -16,8 +16,8 @@ export function resolveTypes(g: Graph): ResolvedTypes {
     );
 
     for (const e of g.edges) {
-        const sourceBlock = library.get(g.nodes.get(e.sourceNode)!.block)!;
-        const targetBlock = library.get(g.nodes.get(e.targetNode)!.block)!;
+        const sourceBlock = reg.get(g.nodes.get(e.sourceNode)!.block)!;
+        const targetBlock = reg.get(g.nodes.get(e.targetNode)!.block)!;
 
         const a = mangle(e.sourceNode, sourceBlock.outputs[e.sourcePort]!);
         const b = mangle(e.targetNode, targetBlock.inputs[e.targetPort]!);
@@ -47,15 +47,8 @@ export function resolveTypes(g: Graph): ResolvedTypes {
 
     for (const [nid, node] of g.nodes) {
         const binds: Map<string, TypeExpr> = new Map();
-        const b = library.get(node.block)!;
-        for (const ports of [b.inputs, b.outputs]) {
-            for (const [pname, ptype] of Object.entries(ports)) {
-                if (ptype.k === "var") {
-                    const rt = resolveVars(mangle(nid, ptype));
-                    binds.set(ptype.name, rt);
-                }
-            }
-        }
+        for (const v of reg.get(node.block)!.vars)
+            binds.set(v, resolveVars(mangle(nid, { k: "var", name: v })));
         result.binds.set(nid, binds);
     }
 

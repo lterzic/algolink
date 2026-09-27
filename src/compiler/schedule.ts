@@ -1,6 +1,6 @@
 import type { BlockDecl } from "../base/block.js";
 import type { Graph } from "../base/graph.js";
-import { library, type Library } from "../base/library.js";
+import type { Registry } from "../base/library.js";
 
 export interface GraphSchedule {
     outputs: string[]; // Node ids in output computation order
@@ -11,24 +11,28 @@ function isFeedthrough(b: BlockDecl, input: string) {
     return !b.feedthrough || Object.values(b.feedthrough).some(ins => ins.includes(input));
 }
 
-// Expects a graph that passed validateGraph
-export function schedule(g: Graph, lib: Library = library): GraphSchedule {
-    // For each node, specify all nodes that depend on it (source -> target)
+// For each node, the nodes whose outputs read it within the same step (source -> target)
+export function feedthroughDeps(g: Graph, reg: Registry): Map<string, Set<string>> {
     const deps = new Map<string, Set<string>>();
-    const indeg = new Map<string, number>();
-    for (const nid of g.nodes.keys()) {
+    for (const nid of g.nodes.keys())
         deps.set(nid, new Set());
-        indeg.set(nid, 0);
-    }
 
     for (const e of g.edges) {
-        const target = lib.get(g.nodes.get(e.targetNode)!.block)!;
-        if (!isFeedthrough(target, e.targetPort)) continue;
-        const next = deps.get(e.sourceNode)!;
-        if (next.has(e.targetNode)) continue;
-        next.add(e.targetNode);
-        indeg.set(e.targetNode, indeg.get(e.targetNode)! + 1);
+        const target = reg.get(g.nodes.get(e.targetNode)!.block)!;
+        if (isFeedthrough(target, e.targetPort))
+            deps.get(e.sourceNode)!.add(e.targetNode);
     }
+    return deps;
+}
+
+// Expects a graph that passed validateGraph and its feedthroughDeps
+export function schedule(g: Graph, reg: Registry, deps: Map<string, Set<string>>): GraphSchedule {
+    const indeg = new Map<string, number>();
+    for (const nid of g.nodes.keys())
+        indeg.set(nid, 0);
+    for (const next of deps.values())
+        for (const w of next)
+            indeg.set(w, indeg.get(w)! + 1);
 
     // Seeded in insertion order for stable output
     const queue = [...g.nodes.keys()].filter(nid => indeg.get(nid) === 0);
@@ -55,7 +59,7 @@ export function schedule(g: Graph, lib: Library = library): GraphSchedule {
     }
 
     const updates = [...g.nodes]
-        .filter(([, node]) => lib.get(node.block)!.stateful)
+        .filter(([, node]) => reg.get(node.block)!.stateful)
         .map(([nid]) => nid);
 
     return { outputs: queue, updates };
