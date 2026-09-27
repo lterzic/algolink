@@ -4,7 +4,7 @@
   "description": "Graph compiler: typed generic blocks and edges lowered to target-language source",
   "type": "module",
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p test",
     "test": "tsx --test test/*.test.ts",
     "build": "tsc"
   },

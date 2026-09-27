@@ -1,28 +1,26 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { BlockDecl } from "../src/base/block.js";
-import { registerBlock } from "../src/base/library.js";
-import { resolveTypes, type ResolvedTypes } from "../src/compiler/typeres.js";
-import { graph, named, tvar } from "./helpers.js";
+import type { Graph } from "../src/base/graph.js";
+import { resolveTypes as resolve, type ResolvedTypes } from "../src/compiler/typeres.js";
+import { graph, named, registry, tvar } from "./helpers.js";
 
-const F = named("float");
-const I = named("int");
+const F = named("f32");
+const I = named("i32");
 const T = tvar("T");
 
-// resolveTypes only reads the global library; each test file runs in its own process
-const blocks: BlockDecl[] = [
-    { name: "FSrc", inputs: {}, outputs: { y: F }, stateful: false },
-    { name: "ISrc", inputs: {}, outputs: { y: I }, stateful: false },
-    { name: "Gen", inputs: {}, outputs: { y: T }, stateful: false },
-    { name: "FSink", inputs: { u: F }, outputs: {}, stateful: false },
-    { name: "ISink", inputs: { u: I }, outputs: {}, stateful: false },
-    { name: "Id", inputs: { u: T }, outputs: { y: T }, stateful: false },
-    { name: "Add", inputs: { a: T, b: T }, outputs: { y: T }, stateful: false },
-    { name: "Delay", inputs: { u: T }, outputs: { y: T }, stateful: true, feedthrough: { y: [] } },
-    { name: "ToInt", inputs: { u: T }, outputs: { y: I }, stateful: false },
-    { name: "Pair", inputs: { a: tvar("A"), b: tvar("B") }, outputs: { x: tvar("A"), y: tvar("B") }, stateful: false },
-];
-for (const b of blocks) registerBlock(b);
+const reg = registry([
+    { name: "FSrc", vars: [], inputs: {}, outputs: { y: F }, stateful: false },
+    { name: "ISrc", vars: [], inputs: {}, outputs: { y: I }, stateful: false },
+    { name: "Gen", vars: ["T"], inputs: {}, outputs: { y: T }, stateful: false },
+    { name: "FSink", vars: [], inputs: { u: F }, outputs: {}, stateful: false },
+    { name: "ISink", vars: [], inputs: { u: I }, outputs: {}, stateful: false },
+    { name: "Id", vars: ["T"], inputs: { u: T }, outputs: { y: T }, stateful: false },
+    { name: "Add", vars: ["T"], inputs: { a: T, b: T }, outputs: { y: T }, stateful: false },
+    { name: "Delay", vars: ["T"], inputs: { u: T }, outputs: { y: T }, stateful: true, feedthrough: { y: [] } },
+    { name: "ToInt", vars: ["T"], inputs: { u: T }, outputs: { y: I }, stateful: false },
+    { name: "Pair", vars: ["A", "B"], inputs: { a: tvar("A"), b: tvar("B") }, outputs: { x: tvar("A"), y: tvar("B") }, stateful: false },
+]);
+const resolveTypes = (g: Graph) => resolve(g, reg);
 
 const binds = (r: ResolvedTypes) =>
     Object.fromEntries([...r.binds].map(([nid, m]) => [nid, Object.fromEntries(m)]));
@@ -111,25 +109,25 @@ test("graph without edges", () => {
 
 test("mismatch between concrete ports", () => {
     const g = graph({ s: "FSrc", k: "ISink" }, [["s.y", "k.u"]]);
-    assert.throws(() => resolveTypes(g), { message: "Can't match types on edge s.y -> k.u: float !== int" });
+    assert.throws(() => resolveTypes(g), { message: "Can't match types on edge s.y -> k.u: f32 !== i32" });
 });
 
 test("mismatch at a join", () => {
     const g = graph({ s: "FSrc", i: "ISrc", add: "Add" }, [["s.y", "add.a"], ["i.y", "add.b"]]);
-    assert.throws(() => resolveTypes(g), { message: "Can't match types on edge i.y -> add.b: int !== float" });
+    assert.throws(() => resolveTypes(g), { message: "Can't match types on edge i.y -> add.b: i32 !== f32" });
 });
 
 test("mismatch reports resolved types, not vars", () => {
     const g = graph({ s: "FSrc", a: "Id", b: "Id", k: "ISink" },
         [["s.y", "a.u"], ["a.y", "b.u"], ["b.y", "k.u"]]);
-    assert.throws(() => resolveTypes(g), { message: "Can't match types on edge b.y -> k.u: float !== int" });
+    assert.throws(() => resolveTypes(g), { message: "Can't match types on edge b.y -> k.u: f32 !== i32" });
 });
 
 test("mismatch found after vars are linked", () => {
     // a and b are linked through add before either gets a concrete type
     const g = graph({ a: "Id", b: "Id", add: "Add", s: "FSrc", i: "ISrc" },
         [["a.y", "add.a"], ["b.y", "add.b"], ["s.y", "a.u"], ["i.y", "b.u"]]);
-    assert.throws(() => resolveTypes(g), { message: "Can't match types on edge i.y -> b.u: int !== float" });
+    assert.throws(() => resolveTypes(g), { message: "Can't match types on edge i.y -> b.u: i32 !== f32" });
 });
 
 test("generic numbering restarts per call", () => {
