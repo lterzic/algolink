@@ -1,14 +1,14 @@
 import type { NestedBlock, PortList, TypeExpr } from "../base/block.js";
-import type { Graph } from "../base/graph.js";
-import type { Registry } from "../base/library.js";
+import type { BlockLookup, Graph } from "../base/graph.js";
 import { IN_PORT, OUT_PORT } from "../base/block.js";
 import { feedthroughDeps, schedule } from "./schedule.js";
 import { resolveTypes } from "./typeres.js";
 import { validateGraph } from "./validate.js";
 
 // Derives a block interface from a graph whose core/In and core/Out nodes become its ports.
-// The result is validated when added to a library
-export function compileNested(name: string, g: Graph, reg: Registry): NestedBlock {
+// The result is validated when added to a library. The block keeps a copy of g, so later
+// changes to g don't leave it out of sync with the derived interface
+export function compileNested(name: string, g: Graph, reg: BlockLookup): NestedBlock {
     validateGraph(g, reg);
     const deps = feedthroughDeps(g, reg);
     schedule(g, reg, deps); // Rejects algebraic loops
@@ -43,5 +43,10 @@ export function compileNested(name: string, g: Graph, reg: Registry): NestedBloc
         }
     }
 
-    return { k: "nested", name, vars: types.vars, inputs, outputs, stateful, feedthrough, graph: g };
+    const graph: Graph = {
+        nodes: new Map([...g.nodes].map(([nid, node]) => [nid, { ...node }])),
+        edges: g.edges.map(e => ({ ...e })),
+        ...(g.ui !== undefined && { ui: g.ui }),
+    };
+    return { k: "nested", name, vars: types.vars, inputs, outputs, stateful, feedthrough, graph };
 }

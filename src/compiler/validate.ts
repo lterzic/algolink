@@ -1,12 +1,11 @@
-import { edgeName, type Edge, type Graph } from "../base/graph.js";
-import type { Registry } from "../base/library.js";
+import { edgeName, type BlockLookup, type Edge, type Graph } from "../base/graph.js";
 
 // Checks everything later passes assume, so they can index the graph and registry directly
-export function validateGraph(g: Graph, reg: Registry): void {
+export function validateGraph(g: Graph, reg: BlockLookup): void {
     const errors: string[] = [];
 
     for (const [nid, node] of g.nodes)
-        if (!reg.has(node.block))
+        if (!reg.get(node.block))
             errors.push(`Node "${nid}": unknown block "${node.block}"`);
 
     const checkPort = (e: Edge, nid: string, dir: "inputs" | "outputs", port: string) => {

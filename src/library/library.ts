@@ -1,10 +1,8 @@
 import {
-    IN_PORT, isNamedType, OUT_PORT, TEMPLATE_REGEX, TEMPLATE_SEP,
-    type BlockDecl, type IOBlock, type NativeBlock, type Template,
-} from "./block.js";
-import type { Edge, Graph } from "./graph.js";
-import { checkIdent } from "./ident.js";
-import { compileNested } from "../compiler/nested.js";
+    isNamedType, TEMPLATE_REGEX, TEMPLATE_SEP,
+    type BlockDecl, type NativeBlock, type Template,
+} from "../base/block.js";
+import { checkIdent } from "../base/ident.js";
 
 export interface Library {
     name: string;
@@ -141,102 +139,4 @@ export function addBlock(lib: Library, decl: BlockDecl) {
     if (errors.length)
         throw new Error(errors.join("\n"));
     lib.blocks.set(decl.name, decl);
-}
-
-function coreLibrary(): Library {
-    const T = { k: "var", name: "T" } as const;
-    const lib = createLibrary("core");
-    const blocks: IOBlock[] = [
-        { k: "in", name: "In", vars: ["T"], inputs: {}, outputs: { [OUT_PORT]: T }, stateful: false },
-        { k: "out", name: "Out", vars: ["T"], inputs: { [IN_PORT]: T }, outputs: {}, stateful: false },
-    ];
-    for (const b of blocks) addBlock(lib, b);
-    return lib;
-}
-
-// Loaded libraries; blocks are looked up as "<library>/<block>"
-export class Registry {
-    private libs = new Map<string, Library>();
-
-    constructor() {
-        this.add(coreLibrary());
-    }
-
-    // Kept by reference, so blocks added to lib later are visible
-    add(lib: Library) {
-        const errors: string[] = [];
-        checkIdent(errors, lib.name, "library", lib.name);
-        if (this.libs.has(lib.name))
-            errors.push(`${lib.name}: library already loaded`);
-        if (errors.length)
-            throw new Error(errors.join("\n"));
-        this.libs.set(lib.name, lib);
-    }
-
-    remove(name: string) {
-        this.libs.delete(name);
-    }
-
-    library(name: string): Library | undefined {
-        return this.libs.get(name);
-    }
-
-    get(key: string): BlockDecl | undefined {
-        const i = key.indexOf("/");
-        if (i < 0) return undefined;
-        return this.libs.get(key.slice(0, i))?.blocks.get(key.slice(i + 1));
-    }
-
-    has(key: string): boolean {
-        return this.get(key) !== undefined;
-    }
-}
-
-// Nodes are a list, since object keys that look like integers lose insertion order
-interface GraphJSON {
-    nodes: { id: string; block: string; }[];
-    edges: Edge[];
-}
-
-// Nested blocks keep only the graph; their interface is recompiled on load
-type BlockJSON = NativeBlock | IOBlock | { k: "nested"; name: string; graph: GraphJSON; };
-
-export interface LibraryJSON {
-    version: 1;
-    name: string;
-    blocks: BlockJSON[];
-}
-
-const graphToJSON = (g: Graph): GraphJSON => ({
-    nodes: [...g.nodes].map(([id, node]) => ({ id, block: node.block })),
-    edges: g.edges,
-});
-
-const graphFromJSON = (json: GraphJSON): Graph => ({
-    nodes: new Map(json.nodes.map(({ id, block }) => [id, { block }])),
-    edges: json.edges,
-});
-
-// Blocks keep insertion order, which lets a nested block use earlier blocks of its own library
-export function libraryToJSON(lib: Library): LibraryJSON {
-    const blocks = [...lib.blocks.values()].map((b): BlockJSON =>
-        b.k === "nested" ? { k: "nested", name: b.name, graph: graphToJSON(b.graph) } : b);
-    return { version: 1, name: lib.name, blocks };
-}
-
-// Adds the library to reg, leaving reg unchanged if any block fails
-export function libraryFromJSON(json: LibraryJSON, reg: Registry): Library {
-    if (json.version !== 1)
-        throw new Error(`${json.name}: unsupported library version ${json.version}`);
-
-    const lib = createLibrary(json.name);
-    reg.add(lib);
-    try {
-        for (const b of json.blocks)
-            addBlock(lib, b.k === "nested" ? compileNested(b.name, graphFromJSON(b.graph), reg) : b);
-    } catch (e) {
-        reg.remove(lib.name);
-        throw e;
-    }
-    return lib;
 }

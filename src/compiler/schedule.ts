@@ -1,6 +1,5 @@
 import type { BlockDecl } from "../base/block.js";
-import type { Graph } from "../base/graph.js";
-import type { Registry } from "../base/library.js";
+import type { BlockLookup, Graph } from "../base/graph.js";
 
 export interface GraphSchedule {
     outputs: string[]; // Node ids in output computation order
@@ -12,7 +11,7 @@ function isFeedthrough(b: BlockDecl, input: string) {
 }
 
 // For each node, the nodes whose outputs read it within the same step (source -> target)
-export function feedthroughDeps(g: Graph, reg: Registry): Map<string, Set<string>> {
+export function feedthroughDeps(g: Graph, reg: BlockLookup): Map<string, Set<string>> {
     const deps = new Map<string, Set<string>>();
     for (const nid of g.nodes.keys())
         deps.set(nid, new Set());
@@ -26,7 +25,7 @@ export function feedthroughDeps(g: Graph, reg: Registry): Map<string, Set<string
 }
 
 // Expects a graph that passed validateGraph and its feedthroughDeps
-export function schedule(g: Graph, reg: Registry, deps: Map<string, Set<string>>): GraphSchedule {
+export function schedule(g: Graph, reg: BlockLookup, deps: Map<string, Set<string>>): GraphSchedule {
     const indeg = new Map<string, number>();
     for (const nid of g.nodes.keys())
         indeg.set(nid, 0);

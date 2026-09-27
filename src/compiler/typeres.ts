@@ -1,6 +1,5 @@
 import type { TypeExpr } from "../base/block.js";
-import { edgeName, type Graph } from "../base/graph.js";
-import type { Registry } from "../base/library.js";
+import { edgeName, type BlockLookup, type Graph } from "../base/graph.js";
 
 export interface ResolvedTypes {
     vars: string[]; // Graph generics if vars ambiguous
@@ -8,7 +7,7 @@ export interface ResolvedTypes {
 }
 
 // Expects a graph that passed validateGraph
-export function resolveTypes(g: Graph, reg: Registry): ResolvedTypes {
+export function resolveTypes(g: Graph, reg: BlockLookup): ResolvedTypes {
     const r: Resolution = new Map();
 
     const mangle = (nid: string, t: TypeExpr): TypeExpr => (

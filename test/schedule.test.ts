@@ -1,24 +1,24 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { BlockDecl } from "../src/base/block.js";
-import { registerBlock, type Library } from "../src/base/library.js";
-import { schedule } from "../src/compiler/schedule.js";
-import { graph } from "./helpers.js";
+import type { Graph } from "../src/base/graph.js";
+import { addBlock, createLibrary } from "../src/library/library.js";
+import type { Registry } from "../src/library/registry.js";
+import { feedthroughDeps, schedule as scheduleWith } from "../src/compiler/schedule.js";
+import { graph, registry, stub } from "./helpers.js";
 
-const T = { k: "named", name: "float" } as const;
+const T = { k: "named", name: "f32" } as const;
 
-function makeLib(): Library {
-    const lib: Library = new Map();
-    const blocks: BlockDecl[] = [
-        { name: "Source", inputs: {}, outputs: { y: T }, stateful: false },
-        { name: "Gain", inputs: { u: T }, outputs: { y: T }, stateful: false },
-        { name: "Add", inputs: { a: T, b: T }, outputs: { y: T }, stateful: false },
-        { name: "Delay", inputs: { u: T }, outputs: { y: T }, stateful: true, feedthrough: { y: [] } },
-        { name: "Accum", inputs: { u: T }, outputs: { y: T }, stateful: true },
-    ];
-    for (const b of blocks) registerBlock(b, lib);
-    return lib;
+function makeLib(): Registry {
+    return registry([
+        { name: "Source", vars: [], inputs: {}, outputs: { y: T }, stateful: false },
+        { name: "Gain", vars: [], inputs: { u: T }, outputs: { y: T }, stateful: false },
+        { name: "Add", vars: [], inputs: { a: T, b: T }, outputs: { y: T }, stateful: false },
+        { name: "Delay", vars: [], inputs: { u: T }, outputs: { y: T }, stateful: true, feedthrough: { y: [] } },
+        { name: "Accum", vars: [], inputs: { u: T }, outputs: { y: T }, stateful: true },
+    ]);
 }
+
+const schedule = (g: Graph, reg: Registry) => scheduleWith(g, reg, feedthroughDeps(g, reg));
 
 test("chain follows edges", () => {
     const g = graph({ c: "Gain", b: "Gain", a: "Source" }, [["a.y", "b.u"], ["b.y", "c.u"]]);
@@ -55,11 +55,11 @@ test("node downstream of a loop is not reported", () => {
 });
 
 test("invalid feedthrough is rejected on registration", () => {
-    const lib: Library = new Map();
-    const bad = (feedthrough: Record<string, string[]>, stateful = true): BlockDecl =>
-        ({ name: "Bad", inputs: { u: T }, outputs: { y: T }, stateful, feedthrough });
-    assert.throws(() => registerBlock(bad({ z: [] }), lib), /unknown output "z"/);
-    assert.throws(() => registerBlock(bad({ y: ["v"] }), lib), /unknown input "v"/);
-    assert.throws(() => registerBlock(bad({ y: ["u", "u"] }), lib), /duplicate feedthrough/);
-    assert.throws(() => registerBlock(bad({ y: [] }, false), lib), /never reads input "u"/);
+    const lib = createLibrary("t");
+    const bad = (feedthrough: Record<string, string[]>, stateful = true) =>
+        stub({ name: "Bad", vars: [], inputs: { u: T }, outputs: { y: T }, stateful, feedthrough });
+    assert.throws(() => addBlock(lib, bad({ z: [] })), /unknown output "z"/);
+    assert.throws(() => addBlock(lib, bad({ y: ["v"] })), /unknown input "v"/);
+    assert.throws(() => addBlock(lib, bad({ y: ["u", "u"] })), /duplicate feedthrough/);
+    assert.throws(() => addBlock(lib, bad({ y: [] }, false)), /never reads input "u"/);
 });
